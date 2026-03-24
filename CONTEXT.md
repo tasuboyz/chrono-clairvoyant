@@ -86,12 +86,16 @@ supabase/functions/
 ## Edge Function: `identify-watch`
 
 **Runtime**: Deno (deploy su Supabase)
-**Variabili d'ambiente richieste**:
+**Variabili d'ambiente richieste** (una tra le seguenti):
+- `OPENROUTER_API_KEY` — chiave OpenRouter (da https://openrouter.ai/keys) **[PREFERITO]**
 - `GEMINI_API_KEY` — chiave Google AI Studio (da https://aistudio.google.com/app/apikey)
+- `LOVABLE_API_KEY` — fallback
+
+Variabili d'ambiente sistema:
 - `SUPABASE_URL` — URL progetto Supabase (auto-inject)
 - `SUPABASE_SERVICE_ROLE_KEY` — service role (auto-inject)
 
-**AI Model**: `gemini-2.5-flash` via `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
+**AI Model**: `gemini-2.5-flash` tramite OpenRouter oppure Google AI Studio
 
 **Input**:
 ```json

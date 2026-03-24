@@ -96,15 +96,28 @@ serve(async (req) => {
   }
 
   try {
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!GEMINI_API_KEY && !LOVABLE_API_KEY) throw new Error("No AI API key configured (set GEMINI_API_KEY or LOVABLE_API_KEY)");
+    if (!OPENROUTER_API_KEY && !GEMINI_API_KEY && !LOVABLE_API_KEY) throw new Error("No AI API key configured (set OPENROUTER_API_KEY, GEMINI_API_KEY or LOVABLE_API_KEY)");
 
-    const AI_URL = GEMINI_API_KEY
-      ? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-      : "https://ai.gateway.lovable.dev/v1/chat/completions";
-    const AI_KEY = (GEMINI_API_KEY ?? LOVABLE_API_KEY)!;
-    const AI_MODEL = GEMINI_API_KEY ? "gemini-2.5-flash" : "google/gemini-2.5-flash";
+    let AI_URL: string;
+    let AI_KEY: string;
+    let AI_MODEL: string;
+
+    if (OPENROUTER_API_KEY) {
+      AI_URL = "https://openrouter.ai/api/v1/chat/completions";
+      AI_KEY = OPENROUTER_API_KEY;
+      AI_MODEL = "google/gemini-2.5-flash";
+    } else if (GEMINI_API_KEY) {
+      AI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+      AI_KEY = GEMINI_API_KEY;
+      AI_MODEL = "gemini-2.5-flash";
+    } else {
+      AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+      AI_KEY = LOVABLE_API_KEY!;
+      AI_MODEL = "google/gemini-2.5-flash";
+    }
 
     const { input_type, image_base64, text } = await req.json();
 
