@@ -1,3 +1,3 @@
-# Welcome to your Lovable project
+# Luxury InStock - Watch Identification & Market Analysis
 
 TODO: Document your project here

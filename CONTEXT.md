@@ -5,7 +5,7 @@
 App web italiana per l'identificazione di orologi di lusso tramite AI.
 L'utente carica una foto o descrive l'orologio a parole; l'AI risponde con marca, modello, referenza, specifiche tecniche, stima di prezzo e descrizione editoriale.
 
-Progetto sviluppato con **Lovable** e collegato a **Supabase** per backend e storage dati.
+Progetto **Luxury InStock** collegato a **Supabase** per backend e storage dati.
 
 ---
 
@@ -89,7 +89,6 @@ supabase/functions/
 **Variabili d'ambiente richieste** (una tra le seguenti):
 - `OPENROUTER_API_KEY` — chiave OpenRouter (da https://openrouter.ai/keys) **[PREFERITO]**
 - `GEMINI_API_KEY` — chiave Google AI Studio (da https://aistudio.google.com/app/apikey)
-- `LOVABLE_API_KEY` — fallback
 
 Variabili d'ambiente sistema:
 - `SUPABASE_URL` — URL progetto Supabase (auto-inject)
