@@ -21,6 +21,28 @@
 
   <body>
     <div id="root"></div>
+    <!-- GitHub Pages SPA: restore path from 404.html redirect -->
+    <script>
+      (function () {
+        var redirect = sessionStorage.redirect;
+        delete sessionStorage.redirect;
+        if (redirect && redirect !== location.href) {
+          history.replaceState(null, null, redirect);
+        }
+        // Restore path from query param set by 404.html
+        var search = location.search;
+        if (search) {
+          var params = new URLSearchParams(search);
+          var p = params.get("p");
+          var q = params.get("q");
+          if (p !== null) {
+            var base = location.pathname;
+            var newPath = base + (p ? "/" + p.replace(/~and~/g, "&") : "") + (q ? "?" + q.replace(/~and~/g, "&") : "") + location.hash;
+            history.replaceState(null, null, newPath);
+          }
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

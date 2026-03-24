@@ -36,6 +36,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
+          VITE_BASE_URL: /chrono-clairvoyant/
           VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
