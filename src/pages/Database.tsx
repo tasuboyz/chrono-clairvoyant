@@ -109,7 +109,7 @@ export default function Database() {
                           <BarChart2 className="w-4 h-4" />
                         </button>
                         <a
-                          href={`https://www.chrono24.com/search/?q=${encodeURIComponent(w.brand + ' ' + w.reference)}`}
+                          href={`http://chrono24.com/search/index.htm?dosearch=true&query=${encodeURIComponent(w.brand + ' ' + w.reference)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"

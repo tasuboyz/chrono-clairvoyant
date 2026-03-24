@@ -285,7 +285,7 @@ export function generateMarketData(brand: string, model: string, reference: stri
     source,
     price: Math.round(basePrice + ((seed * (i + 1)) % spread)),
     condition: CONDITIONS[(seed + i) % 4],
-    url: `https://www.chrono24.com/search/?q=${encodeURIComponent(brand + ' ' + reference)}`,
+    url: `http://chrono24.com/search/index.htm?dosearch=true&query=${encodeURIComponent(brand + ' ' + reference)}`,
     date: getRecentDate(i),
   }));
 

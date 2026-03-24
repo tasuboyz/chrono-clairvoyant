@@ -106,8 +106,8 @@ const Result = () => {
   const { watch, description } = result;
   const lowConfidence = watch.confidence < 0.5;
   const brandSlug = watch.brand?.toLowerCase().replace(/\s+/g, "-");
-  const chrono24Search = `https://www.chrono24.com/search/index.htm?query=${encodeURIComponent(watch.brand + " " + watch.model)}`;
-  const chrono24Lis = `https://www.chrono24.com/search/index.htm?customerId=20696&dosearch=true&query=${encodeURIComponent(watch.model)}`;
+  const chrono24Search = `http://chrono24.com/search/index.htm?dosearch=true&query=${encodeURIComponent(watch.brand + " " + watch.model)}`;
+  const chrono24Lis = `http://chrono24.com/search/index.htm?dosearch=true&query=${encodeURIComponent(watch.brand + " " + watch.model)}`;
   const lisCollection = `https://luxuryinstock.com/collections/${brandSlug}`;
   const officialUrl = brandUrls[watch.brand];
 
