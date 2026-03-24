@@ -96,8 +96,15 @@ serve(async (req) => {
   }
 
   try {
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    if (!GEMINI_API_KEY && !LOVABLE_API_KEY) throw new Error("No AI API key configured (set GEMINI_API_KEY or LOVABLE_API_KEY)");
+
+    const AI_URL = GEMINI_API_KEY
+      ? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+      : "https://ai.gateway.lovable.dev/v1/chat/completions";
+    const AI_KEY = (GEMINI_API_KEY ?? LOVABLE_API_KEY)!;
+    const AI_MODEL = GEMINI_API_KEY ? "gemini-2.5-flash" : "google/gemini-2.5-flash";
 
     const { input_type, image_base64, text } = await req.json();
 
@@ -123,14 +130,14 @@ serve(async (req) => {
       ];
     }
 
-    const identifyResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const identifyResponse = await fetch(AI_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${AI_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: AI_MODEL,
         messages,
         tools: [WATCH_JSON_SCHEMA],
         tool_choice: { type: "function", function: { name: "identify_watch" } },
@@ -161,14 +168,14 @@ serve(async (req) => {
     const watch = JSON.parse(toolCall.function.arguments);
 
     // Step 2: Generate expert description
-    const descResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const descResponse = await fetch(AI_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${AI_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: AI_MODEL,
         messages: [
           { role: "system", content: DESCRIPTION_PROMPT(watch.brand, watch.model, watch.reference) },
           { role: "user", content: "Genera la descrizione editoriale." },

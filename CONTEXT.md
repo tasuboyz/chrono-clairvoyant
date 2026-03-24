@@ -19,7 +19,7 @@ Progetto sviluppato con **Lovable** e collegato a **Supabase** per backend e sto
 | Routing | React Router DOM v6 |
 | State/Query | TanStack Query v5 |
 | Backend | Supabase (DB + Edge Functions) |
-| AI | Lovable AI Gateway → Google Gemini 2.5 Flash |
+| AI | Google AI Studio → Google Gemini 2.5 Flash |
 | Test | Vitest + Testing Library + Playwright |
 
 ---
@@ -87,11 +87,11 @@ supabase/functions/
 
 **Runtime**: Deno (deploy su Supabase)
 **Variabili d'ambiente richieste**:
-- `LOVABLE_API_KEY` — chiave Lovable AI Gateway
+- `GEMINI_API_KEY` — chiave Google AI Studio (da https://aistudio.google.com/app/apikey)
 - `SUPABASE_URL` — URL progetto Supabase (auto-inject)
 - `SUPABASE_SERVICE_ROLE_KEY` — service role (auto-inject)
 
-**AI Model**: `google/gemini-2.5-flash` via `https://ai.gateway.lovable.dev/v1/chat/completions`
+**AI Model**: `gemini-2.5-flash` via `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
 
 **Input**:
 ```json

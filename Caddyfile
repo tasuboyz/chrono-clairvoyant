@@ -1,0 +1,50 @@
+# Chrono Clairvoyant — Caddyfile
+# Caddy gestisce automaticamente HTTPS via Let's Encrypt.
+# Imposta la variabile DOMAIN nel file .env.production prima del deploy.
+#
+# Per test locale senza dominio, usa: http://localhost
+
+{env.DOMAIN} {
+
+    # ── Radice del sito ──────────────────────────────────────────────────────
+    root * /srv
+
+    # ── Encoding gzip/zstd ──────────────────────────────────────────────────
+    encode zstd gzip
+
+    # ── SPA fallback: tutte le route → index.html ───────────────────────────
+    try_files {path} /index.html
+
+    # ── File server ─────────────────────────────────────────────────────────
+    file_server
+
+    # ── Cache headers per asset immutabili (Vite genera hash nel nome) ──────
+    @immutable {
+        path /assets/*
+    }
+    header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+    # ── Cache breve per index.html e robots ─────────────────────────────────
+    @html {
+        path *.html /robots.txt /favicon.ico
+    }
+    header @html Cache-Control "public, max-age=60, must-revalidate"
+
+    # ── Security headers ─────────────────────────────────────────────────────
+    header {
+        # Rimuove il fingerprint del server
+        -Server
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    }
+
+    # ── Log strutturati ──────────────────────────────────────────────────────
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}

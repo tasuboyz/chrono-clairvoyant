@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+.git
+.gitignore
+.env
+.env.*
+!.env.production.example
+*.log
+.DS_Store
+.vscode
+coverage
+playwright-report
+test-results
+supabase/.branches
+supabase/.temp
