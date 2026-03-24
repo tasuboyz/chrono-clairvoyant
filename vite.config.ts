@@ -5,7 +5,7 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  base: process.env.VITE_BASE_URL || "/chrono-clairvoyant/",
+  base: mode === "production" ? "/chrono-clairvoyant/" : "/",
   server: {
     host: "::",
     port: 8080,
