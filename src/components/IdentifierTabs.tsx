@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { loadSettings } from "@/hooks/useSettings";
 
 interface IdentifierTabsProps {
   defaultTab?: string;
@@ -45,6 +46,11 @@ const IdentifierTabs = forwardRef<HTMLDivElement, IdentifierTabsProps>(({ defaul
     setLoading(true);
     try {
       let body: any = { input_type: type };
+
+      // Attach the user-configured Gemini key so the edge function can use it
+      // when no server-side AI key is set (demo / self-hosted mode).
+      const { geminiApiKey } = loadSettings();
+      if (geminiApiKey) body.gemini_api_key = geminiApiKey;
 
       if (type === "image" && image) {
         const reader = new FileReader();

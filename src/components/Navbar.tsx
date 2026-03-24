@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
+import SettingsModal from "@/components/SettingsModal";
 
 const NAV_LINKS = [
   { to: '/dashboard', label: 'Dashboard' },
@@ -35,11 +36,15 @@ const Navbar = () => {
               {label}
             </Link>
           ))}
+          <SettingsModal />
         </div>
 
-        <button onClick={() => setOpen(!open)} className="md:hidden text-foreground">
-          {open ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        <div className="md:hidden flex items-center gap-3">
+          <SettingsModal />
+          <button onClick={() => setOpen(!open)} className="text-foreground">
+            {open ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
       </div>
 
       {open && (
