@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { loadSettings } from "@/hooks/useSettings";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface IdentifierTabsProps {
   defaultTab?: string;
@@ -30,6 +31,7 @@ const IdentifierTabs = forwardRef<HTMLDivElement, IdentifierTabsProps>(({ defaul
   const [webcamPreview, setWebcamPreview] = useState<string | null>(null);
   
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const handleFile = useCallback((file: File) => {
     if (file.size > 10 * 1024 * 1024) {
@@ -195,7 +197,7 @@ const IdentifierTabs = forwardRef<HTMLDivElement, IdentifierTabsProps>(({ defaul
           transition={{ duration: 0.6 }}
         >
           <Tabs value={tab} onValueChange={setTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4 bg-secondary h-12 rounded-lg">
+            <TabsList className={`w-full bg-secondary h-12 rounded-lg grid ${isMobile ? "grid-cols-4" : "grid-cols-3"}`}>
               <TabsTrigger value="image" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md font-body text-xs sm:text-sm">
                 <ImageIcon className="mr-1 sm:mr-2 h-4 w-4" />
                 <span className="hidden sm:inline">Carica</span>
@@ -204,10 +206,12 @@ const IdentifierTabs = forwardRef<HTMLDivElement, IdentifierTabsProps>(({ defaul
                 <LinkIcon className="mr-1 sm:mr-2 h-4 w-4" />
                 <span className="hidden sm:inline">Link</span>
               </TabsTrigger>
-              <TabsTrigger value="webcam" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md font-body text-xs sm:text-sm">
-                <Camera className="mr-1 sm:mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Foto</span>
-              </TabsTrigger>
+              {isMobile && (
+                <TabsTrigger value="webcam" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md font-body text-xs sm:text-sm">
+                  <Camera className="mr-1 sm:mr-2 h-4 w-4" />
+                  <span className="hidden sm:inline">Foto</span>
+                </TabsTrigger>
+              )}
               <TabsTrigger value="text" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md font-body text-xs sm:text-sm">
                 <FileText className="mr-1 sm:mr-2 h-4 w-4" />
                 <span className="hidden sm:inline">Testo</span>
