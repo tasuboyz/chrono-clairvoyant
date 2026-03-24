@@ -1,6 +1,7 @@
 # Env di produzione (mai committare!)
 .env.production
 .env.local
+.env
 
 # Logs
 logs
