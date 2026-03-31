@@ -4,12 +4,14 @@ export interface AppSettings {
   supabaseUrl: string;
   supabaseAnonKey: string;
   geminiApiKey: string;
+  debugMode?: string;
 }
 
 const KEYS = {
   supabaseUrl: "cc_supabase_url",
   supabaseAnonKey: "cc_supabase_anon_key",
   geminiApiKey: "cc_gemini_api_key",
+  debugMode: "cc_debug_mode",
 } as const;
 
 export function loadSettings(): AppSettings {
@@ -17,6 +19,7 @@ export function loadSettings(): AppSettings {
     supabaseUrl: localStorage.getItem(KEYS.supabaseUrl) ?? "",
     supabaseAnonKey: localStorage.getItem(KEYS.supabaseAnonKey) ?? "",
     geminiApiKey: localStorage.getItem(KEYS.geminiApiKey) ?? "",
+    debugMode: localStorage.getItem(KEYS.debugMode) ?? "false",
   };
 }
 
@@ -26,6 +29,7 @@ export function persistSettings(settings: AppSettings): void {
   set(KEYS.supabaseUrl, settings.supabaseUrl.trim());
   set(KEYS.supabaseAnonKey, settings.supabaseAnonKey.trim());
   set(KEYS.geminiApiKey, settings.geminiApiKey.trim());
+  set(KEYS.debugMode, (settings.debugMode || "false").trim());
 }
 
 /** True when Supabase credentials are available (env or localStorage). */

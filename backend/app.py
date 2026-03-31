@@ -2,13 +2,18 @@ import os
 from flask import Flask, send_from_directory, send_file
 
 import config
-from routes import identify_bp, market_bp
+from routes import identify_bp, market_bp, analyze_bp
+from services.db_service import init_db
 
 app = Flask(__name__, static_folder=config.DIST_DIR, static_url_path="")
 
 # API blueprints
 app.register_blueprint(identify_bp, url_prefix="/api")
 app.register_blueprint(market_bp, url_prefix="/api")
+app.register_blueprint(analyze_bp, url_prefix="/api")
+
+# Inizializza SQLite — crea backend/data/watches.db se non esiste
+init_db()
 
 
 # Serve Vite hashed assets (e.g. /assets/index-abc123.js)

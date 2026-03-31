@@ -10,6 +10,10 @@ class Chrono24Scraper(BaseScraper):
     BASE_URL = "https://www.chrono24.com/search/index.htm"
 
     def scrape(self, query: str) -> List[Dict]:
+        # Se il parametro viene passato direttamente come url prodotto da chrono24
+        if "chrono24.com" in query and query.lower().endswith(".htm"):
+            return self._scrape_item_page(query)
+
         params = {
             "dosearch": "true",
             "query": query,
@@ -53,6 +57,49 @@ class Chrono24Scraper(BaseScraper):
                 continue
 
         return listings
+
+    def _scrape_item_page(self, item_url: str) -> List[Dict]:
+        try:
+            self.page.goto(item_url, wait_until="domcontentloaded", timeout=self.timeout_ms)
+        except Exception:
+            return []
+
+        # Price
+        price_el = self.page.query_selector(
+            "[data-testid='price'] , .price , .js-price, .article-price, [class*='price']"
+        )
+        price = None
+        if price_el:
+            price = self._parse_price_eur(price_el.inner_text())
+
+        # Condition
+        condition_el = self.page.query_selector(
+            "[data-testid='condition'], .watch-condition, .condition-badge, [class*='condition']"
+        )
+        condition_raw = condition_el.inner_text().strip() if condition_el else "Usato"
+        condition = self._normalize_condition(condition_raw)
+
+        # Image
+        image_el = self.page.query_selector(
+            "img[src*='chrono24'], img[src*='/content/'], .gallery__image img, .js-gallery-image"
+        )
+        image_url = None
+        if image_el:
+            image_url = image_el.get_attribute("src") or image_el.get_attribute("data-src")
+            if image_url and image_url.startswith("//"):
+                image_url = "https:" + image_url
+
+        item = {
+            "source": "Chrono24",
+            "price": price if price is not None else 0,
+            "condition": condition,
+            "url": item_url,
+            "date": date.today().strftime("%d/%m/%y"),
+        }
+        if image_url:
+            item["image_url"] = image_url
+
+        return [item]
 
     def _parse_card(self, card, today: str) -> Dict | None:
         # Price

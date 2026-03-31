@@ -91,18 +91,35 @@ def _chat(messages: list, tools, tool_choice, ai_key: str, use_openrouter: bool,
         payload["tools"] = tools
         payload["tool_choice"] = tool_choice
 
-    resp = httpx.post(
-        url,
-        headers={"Authorization": f"Bearer {ai_key}", "Content-Type": "application/json"},
-        json=payload,
-        timeout=timeout,
-    )
+    # Google Gemini API requires key in URL query params, not in Authorization header
+    if not use_openrouter:
+        url = f"{url}?key={ai_key}"
+        resp = httpx.post(
+            url,
+            headers={"Content-Type": "application/json"},
+            json=payload,
+            timeout=timeout,
+        )
+    else:
+        resp = httpx.post(
+            url,
+            headers={"Authorization": f"Bearer {ai_key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=timeout,
+        )
 
     if resp.status_code == 429:
         raise ValueError("Troppi tentativi. Riprova tra qualche istante.")
     if resp.status_code == 402:
         raise ValueError("Crediti esauriti.")
-    resp.raise_for_status()
+    if resp.status_code >= 400:
+        error_detail = resp.text
+        try:
+            error_json = resp.json()
+            error_detail = error_json.get("error", {}).get("message", error_detail)
+        except:
+            pass
+        raise ValueError(f"API Error ({resp.status_code}): {error_detail}")
     return resp.json()
 
 
@@ -110,6 +127,10 @@ def identify_watch(input_type: str, image_b64: str | None, text: str | None, ai_
     if input_type == "image":
         if not image_b64:
             raise ValueError("No image provided")
+        # Convert raw base64 to data URI if needed
+        if not image_b64.startswith("data:"):
+            image_b64 = f"data:image/jpeg;base64,{image_b64}"
+        
         messages = [
             {"role": "system", "content": IMAGE_SYSTEM_PROMPT},
             {

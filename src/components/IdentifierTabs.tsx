@@ -1,4 +1,5 @@
 import { useState, useCallback, forwardRef, useRef, useEffect } from "react";
+import AnalysisFeed from "@/components/AnalysisFeed";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, FileText, Loader2, Image as ImageIcon, X, Link as LinkIcon, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,8 @@ const IdentifierTabs = forwardRef<HTMLDivElement, IdentifierTabsProps>(({ defaul
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [activeInputType, setActiveInputType] = useState<string>("image");
   
   // URL & Webcam
   const [urlInput, setUrlInput] = useState("");
@@ -137,15 +140,38 @@ const IdentifierTabs = forwardRef<HTMLDivElement, IdentifierTabsProps>(({ defaul
     };
   }, []);
 
+  const handleAnalysisDone = useCallback(
+    (result: Record<string, unknown>) => {
+      setSessionId(null);
+      navigate("/result", {
+        state: {
+          result,
+          imagePreview: activeInputType !== "text" ? imagePreview || webcamPreview : null,
+        },
+      });
+    },
+    [navigate, imagePreview, webcamPreview, activeInputType]
+  );
+
+  const handleAnalysisError = useCallback((message: string) => {
+    setSessionId(null);
+    toast.error(message || "Errore durante l'analisi. Riprova.");
+  }, []);
+
   const handleAnalyze = async (type: "image" | "text" | "url" | "webcam") => {
+    setActiveInputType(type);
     setLoading(true);
+    let sessionStarted = false;
     try {
-      let body: any = { input_type: "image" };
+      let body: Record<string, unknown> = { input_type: "image" };
 
       // Attach the user-configured Gemini key so the edge function can use it
       // when no server-side AI key is set (demo / self-hosted mode).
-      const { geminiApiKey } = loadSettings();
+      const { geminiApiKey, debugMode } = loadSettings();
       if (geminiApiKey) body.gemini_api_key = geminiApiKey;
+      if (debugMode?.toLowerCase() === "true") {
+        body.debug = true;
+      }
 
       if (type === "image" && image) {
         const reader = new FileReader();
@@ -172,24 +198,24 @@ const IdentifierTabs = forwardRef<HTMLDivElement, IdentifierTabsProps>(({ defaul
         return;
       }
 
-      const res = await fetch("/api/identify", {
+      const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+        const err = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(err.error || `HTTP ${res.status}`);
       }
-      const data = await res.json();
-      if (!data || data.error) throw new Error(data?.error || "Errore sconosciuto");
-
-      navigate("/result", { state: { result: data, imagePreview: (type !== "text") ? imagePreview || webcamPreview : null } });
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Si è verificato un errore. Riprova tra qualche istante.");
-    } finally {
+      const { session_id } = await res.json() as { session_id: string };
+      sessionStarted = true;
+      setSessionId(session_id);
       setLoading(false);
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Si è verificato un errore. Riprova tra qualche istante.");
+    } finally {
+      if (!sessionStarted) setLoading(false);
     }
   };
 
@@ -379,6 +405,13 @@ const IdentifierTabs = forwardRef<HTMLDivElement, IdentifierTabsProps>(({ defaul
               </TabsContent>
             </AnimatePresence>
           </Tabs>
+          {sessionId && (
+            <AnalysisFeed
+              sessionId={sessionId}
+              onDone={handleAnalysisDone}
+              onError={handleAnalysisError}
+            />
+          )}
         </motion.div>
       </div>
     </section>

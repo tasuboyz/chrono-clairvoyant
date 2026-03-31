@@ -103,7 +103,7 @@ const Result = () => {
     );
   }
 
-  const { watch, description } = result;
+  const { watch, description, market, confidence_summary: confSummary } = result;
   const lowConfidence = watch.confidence < 0.5;
   const brandSlug = watch.brand?.toLowerCase().replace(/\s+/g, "-");
   const chrono24Search = `http://chrono24.com/search/index.htm?dosearch=true&query=${encodeURIComponent(watch.brand + " " + watch.model)}`;
@@ -114,7 +114,8 @@ const Result = () => {
   const ref = watch.reference ?? '';
   const mockFields = deriveMockFields(watch.brand ?? '', ref);
   const seo = generateSeoFields(watch.brand ?? '', watch.model ?? '', ref);
-  const marketData = generateMarketData(watch.brand ?? '', watch.model ?? '', ref);
+  const marketData = market ?? generateMarketData(watch.brand ?? '', watch.model ?? '', ref);
+  const isRealMarket = !!market;
 
   // Try to get liquidity from db
   const dbWatch = MOCK_WATCHES.find(w => w.reference === ref);
@@ -157,7 +158,23 @@ const Result = () => {
               <div className={`p-8 flex flex-col justify-center ${imagePreview ? "lg:w-1/2" : "w-full"}`}>
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <p className="text-primary font-display text-3xl sm:text-4xl font-bold">{watch.brand}</p>
-                  <LiquidityBadge value={liquidity} />
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {confSummary && (
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full font-medium border ${
+                          confSummary.level === "high"
+                            ? "bg-green-500/10 text-green-400 border-green-500/30"
+                            : confSummary.level === "medium"
+                            ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+                            : "bg-red-500/10 text-red-400 border-red-500/30"
+                        }`}
+                        title={confSummary.factors?.join(" · ")}
+                      >
+                        {confSummary.level === "high" ? "Alta confidenza" : confSummary.level === "medium" ? "Confidenza media" : "Bassa confidenza"}
+                      </span>
+                    )}
+                    <LiquidityBadge value={liquidity} />
+                  </div>
                 </div>
                 <p className="text-foreground font-display text-xl mb-1">{watch.model}</p>
                 <p className="text-muted-foreground text-sm font-body mb-6">Ref. {watch.reference || "Non rilevabile"}</p>
@@ -265,9 +282,9 @@ const Result = () => {
               <div className="space-y-6">
                 <div className="grid grid-cols-3 gap-4">
                   {[
-                    { label: 'Prezzo Minimo', value: marketData.priceMin },
-                    { label: 'Prezzo Medio', value: marketData.priceAvg },
-                    { label: 'Prezzo Massimo', value: marketData.priceMax },
+                    { label: 'Prezzo Minimo', value: marketData.price_min ?? marketData.priceMin ?? 0 },
+                    { label: 'Prezzo Medio', value: marketData.price_avg ?? marketData.priceAvg ?? 0 },
+                    { label: 'Prezzo Massimo', value: marketData.price_max ?? marketData.priceMax ?? 0 },
                   ].map(({ label, value }) => (
                     <div key={label} className="glass-card rounded-xl py-5 text-center">
                       <p className="text-xs text-muted-foreground uppercase tracking-wider">{label}</p>
@@ -279,7 +296,13 @@ const Result = () => {
                 <div className="glass-card rounded-xl p-5">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-display font-semibold text-foreground">Annunci rilevati</h3>
-                    <span className="text-xs text-muted-foreground">{marketData.listingsCount} annunci · <span className="text-yellow-400">DEMO</span></span>
+                    <span className="text-xs text-muted-foreground">
+                      {(marketData.listings_count ?? marketData.listingsCount ?? 0)} annunci ·{" "}
+                      {isRealMarket
+                        ? <span className="text-green-400">Chrono24 live</span>
+                        : <span className="text-yellow-400">DEMO</span>
+                      }
+                    </span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -306,7 +329,7 @@ const Result = () => {
                 </div>
 
                 <PurchaseEvaluator
-                  marketAvg={marketData.priceAvg}
+                  marketAvg={marketData.price_avg ?? marketData.priceAvg ?? 0}
                   brand={watch.brand ?? ''}
                   model={watch.model ?? ''}
                   reference={ref}
@@ -383,7 +406,7 @@ const Result = () => {
         model={watch.model ?? ''}
         reference={ref}
         suggestedPrice={portfolioPrice}
-        marketPrice={marketData.priceAvg}
+        marketPrice={marketData.price_avg ?? marketData.priceAvg ?? 0}
       />
     </div>
   );

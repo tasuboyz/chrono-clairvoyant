@@ -7,13 +7,16 @@ import config
 from services.scrapers.chrono24 import Chrono24Scraper
 
 
-def scrape_market_data(brand: str, model: str, reference: str) -> Dict:
+def scrape_market_data(brand: str, model: str, reference: str, debug: bool = False) -> Dict:
     # Prefer reference number for precision; fall back to brand+model
     query = (
         reference
         if reference and reference.lower() not in ("", "non rilevabile")
         else f"{brand} {model}"
     ).strip()
+
+    if debug:
+        print(f"[DEBUG] Chrono24 query usato: '{query}'")
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=config.SCRAPER_HEADLESS)
@@ -35,13 +38,16 @@ def scrape_market_data(brand: str, model: str, reference: str) -> Dict:
             browser.close()
 
     if not listings:
-        return _empty(brand, model, reference)
+        empty = _empty(brand, model, reference)
+        empty["query"] = query
+        return empty
 
     prices = [l["price"] for l in listings if l.get("price")]
     return {
         "brand": brand,
         "model": model,
         "reference": reference,
+        "query": query,
         "listingsCount": len(listings),
         "priceMin": min(prices) if prices else 0,
         "priceAvg": round(sum(prices) / len(prices)) if prices else 0,

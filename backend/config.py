@@ -6,6 +6,7 @@ load_dotenv()
 # AI provider — set one of these
 OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")  # compatibilità con chi usa nome vecchio in .env
 
 # Flask
 FLASK_HOST: str = os.getenv("FLASK_HOST", "0.0.0.0")
@@ -16,6 +17,12 @@ FLASK_DEBUG: bool = os.getenv("FLASK_DEBUG", "false").lower() == "true"
 DIST_DIR: str = os.getenv(
     "DIST_DIR",
     os.path.join(os.path.dirname(__file__), "..", "dist"),
+)
+
+# SQLite persistence
+DB_PATH: str = os.getenv(
+    "DB_PATH",
+    os.path.join(os.path.dirname(__file__), "data", "watches.db"),
 )
 
 # Playwright scraper

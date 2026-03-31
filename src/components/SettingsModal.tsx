@@ -114,6 +114,23 @@ export default function SettingsModal() {
                 </a>
               </p>
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="debug-mode">Modalità test (debug)</Label>
+              <select
+                id="debug-mode"
+                value={form.debugMode ?? "false"}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, debugMode: e.target.value }))
+                }
+                className="w-full border border-border rounded px-3 py-2"
+              >
+                <option value="false">Disattivato</option>
+                <option value="true">Attivato</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                In modalità test ricevi informazioni extra su AI + ricerche web.
+              </p>
+            </div>
           </div>
         </div>
 
