@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { loadSettings } from "@/hooks/useSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -173,9 +172,16 @@ const IdentifierTabs = forwardRef<HTMLDivElement, IdentifierTabsProps>(({ defaul
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("identify-watch", { body });
-
-      if (error) throw error;
+      const res = await fetch("/api/identify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
       if (!data || data.error) throw new Error(data?.error || "Errore sconosciuto");
 
       navigate("/result", { state: { result: data, imagePreview: (type !== "text") ? imagePreview || webcamPreview : null } });
