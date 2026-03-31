@@ -1,11 +1,15 @@
+import logging
 import time
 import uuid
 import threading
 import config
 from flask import Blueprint, request, jsonify, Response, stream_with_context
 from services.ai_service import identify_watch, generate_description
-from services.db_service import save_watch, search_similar_watches
-from services.playwright_service import scrape_market_data
+
+logger = logging.getLogger(__name__)
+from services.db_service import save_watch, search_similar_watches, get_validated_embeddings
+from services import rag_service
+from services.playwright_service import scrape_market_data, run_brand_agent
 from services.fusion_service import fuse_results
 from services.session_store import create_session, get_session, delete_session, format_sse
 
@@ -17,6 +21,9 @@ def start_analysis():
     body = request.get_json(force=True) or {}
     client_key = body.get("gemini_api_key")
     debug_mode = bool(body.get("debug", False))
+
+    logger.debug("start_analysis request body=%s", {k: v for k, v in body.items() if k != 'image_base64'})
+    logger.info("start_analysis debug_mode=%s", debug_mode)
 
     ai_key = (
         config.OPENROUTER_API_KEY
@@ -47,8 +54,10 @@ def start_analysis():
 
 
 def _run_pipeline(session_id: str, body: dict, ai_key: str, use_openrouter: bool, debug_mode: bool) -> None:
+    logger.info("_run_pipeline started for session %s", session_id)
     session = get_session(session_id)
     if not session:
+        logger.warning("session %s not found", session_id)
         return
     q = session["queue"]
 
@@ -61,6 +70,7 @@ def _run_pipeline(session_id: str, body: dict, ai_key: str, use_openrouter: bool
 
     try:
         # STEP 1 — AI Vision
+        logger.debug("session %s: step 1 started", session_id)
         t0 = time.monotonic()
         q.put(format_sse({
             "event": "step_start", "step": 1,
@@ -78,6 +88,7 @@ def _run_pipeline(session_id: str, body: dict, ai_key: str, use_openrouter: bool
         ms1 = int((time.monotonic() - t0) * 1000)
         conf = int(watch.get("confidence", 0) * 100)
         detail1 = f"{watch.get('brand', '?')} {watch.get('model', '?')} ({conf}%)"
+        logger.info("session %s: step 1 complete watch=%s conf=%s ms=%s", session_id, {k: v for k, v in watch.items() if k in ('brand','model','reference','confidence')}, conf, ms1)
         q.put(format_sse({
             "event": "step_complete", "step": 1,
             "label": "Analisi AI immagine",
@@ -108,30 +119,94 @@ def _run_pipeline(session_id: str, body: dict, ai_key: str, use_openrouter: bool
             "duration_ms": ms2,
         }))
 
-        # STEP 3 — DB Lookup
+        # STEP 3 — DB Lookup + RAG similarity
         t0 = time.monotonic()
         q.put(format_sse({
             "event": "step_start", "step": 3,
             "label": "Ricerca database",
-            "detail": "Cerco occorrenze simili nel DB locale...",
+            "detail": "Cerco occorrenze simili nel DB e RAG...",
         }))
         db_matches = search_similar_watches(
             brand=watch.get("brand", ""),
             model=watch.get("model", ""),
             reference=watch.get("reference"),
         )
+
+        # RAG: cerca per embedding se OPENROUTER_API_KEY è configurata
+        rag_matches: list[dict] = []
+        if config.OPENROUTER_API_KEY:
+            try:
+                query_text = rag_service.build_watch_text(
+                    brand=watch.get("brand", ""),
+                    model=watch.get("model", ""),
+                    reference=watch.get("reference"),
+                )
+                query_emb = rag_service.generate_embedding(query_text)
+                if query_emb:
+                    candidates = get_validated_embeddings()
+                    rag_matches = rag_service.find_similar(query_emb, candidates)
+            except Exception:
+                logger.warning("RAG search failed in step 3", exc_info=True)
+
+        all_matches = rag_matches if rag_matches else db_matches
         ms3 = int((time.monotonic() - t0) * 1000)
-        if db_matches:
+
+        if rag_matches:
+            detail3 = f"{len(rag_matches)} match RAG (similarità semantica)"
+        elif db_matches:
             n = len(db_matches)
             v = sum(1 for m in db_matches if m.get("validated"))
-            detail3 = f"{n} occorrenz{'a' if n == 1 else 'e'} trovate" + (f" ({v} validate)" if v else "")
+            detail3 = f"{n} occorrenz{'a' if n == 1 else 'e'} in DB" + (f" ({v} validate)" if v else "")
         else:
             detail3 = "Nessuna occorrenza trovata"
+
         q.put(format_sse({
             "event": "step_complete", "step": 3,
             "label": "Ricerca database",
             "detail": detail3,
             "duration_ms": ms3,
+        }))
+
+        # STEP 3b — Brand Official Site
+        t0 = time.monotonic()
+        brand_name = watch.get("brand", "")
+        q.put(format_sse({
+            "event": "step_start", "step": "3b",
+            "label": f"Sito ufficiale {brand_name}",
+            "detail": f"Navigazione sito ufficiale {brand_name}...",
+        }))
+
+        brand_result = {"found": False, "reference": None, "specs": {}, "brand_site": brand_name.lower()}
+        try:
+            brand_result = run_brand_agent(
+                brand=brand_name,
+                model=watch.get("model", ""),
+                image_b64=body.get("image_base64"),
+                ai_key=ai_key,
+                use_openrouter=use_openrouter,
+            )
+            if brand_result.get("found"):
+                # Sovrascrive reference e specs con i dati ufficiali
+                official_ref = brand_result.get("reference")
+                if official_ref:
+                    watch["reference"] = official_ref
+                for k, v in brand_result.get("specs", {}).items():
+                    if v:
+                        watch[k] = v
+                watch["official_source_url"] = brand_result.get("source_url")
+                detail3b = f"Trovato · ref. {watch.get('reference', '?')} · {brand_result.get('brand_site', '')}"
+            else:
+                detail3b = "Brand non supportato o orologio non trovato sul sito ufficiale"
+        except Exception as exc:
+            detail3b = f"Sito ufficiale non raggiungibile ({exc})"
+
+        ms3b = int((time.monotonic() - t0) * 1000)
+        q.put(format_sse({
+            "event": "step_complete" if brand_result.get("found") else "step_skipped",
+            "step": "3b",
+            "label": f"Sito ufficiale {brand_name}",
+            "detail": detail3b,
+            "duration_ms": ms3b,
         }))
 
         # STEP 4 — Ricerca Mercato (Chrono24)
@@ -195,8 +270,9 @@ def _run_pipeline(session_id: str, body: dict, ai_key: str, use_openrouter: bool
         fused = fuse_results(
             watch=watch,
             description=description,
-            db_matches=db_matches,
+            db_matches=all_matches,
             market_data=market_data,
+            brand_result=brand_result,
         )
         ms5 = int((time.monotonic() - t0) * 1000)
         cs = fused["confidence_summary"]
@@ -210,11 +286,12 @@ def _run_pipeline(session_id: str, body: dict, ai_key: str, use_openrouter: bool
         }))
 
         # Salva in SQLite — errori gestiti internamente, non propagano nella pipeline
-        save_watch(
+        watch_id = save_watch(
             watch=watch,
             description=description,
             input_type=body.get("input_type", "image"),
         )
+        fused["watch_id"] = watch_id or None
 
         q.put(format_sse({
             "event": "done",
@@ -222,8 +299,10 @@ def _run_pipeline(session_id: str, body: dict, ai_key: str, use_openrouter: bool
         }))
 
     except Exception as e:
+        logger.exception("session %s: pipeline error", session_id)
         q.put(format_sse({"event": "error", "message": str(e)}))
     finally:
+        logger.info("session %s: pipeline finished", session_id)
         q.put(None)  # sentinel: segnala al generatore SSE che la pipeline è terminata
 
 

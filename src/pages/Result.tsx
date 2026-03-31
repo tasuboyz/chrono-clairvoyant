@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, ExternalLink, Mail, Share2, AlertTriangle, BarChart2, Briefcase } from "lucide-react";
+import { ArrowLeft, ExternalLink, Mail, Share2, AlertTriangle, BarChart2, Briefcase, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { LiquidityBadge } from "@/components/LiquidityBadge";
 import { PurchaseEvaluator } from "@/components/PurchaseEvaluator";
 import { AddToPortfolioModal } from "@/components/AddToPortfolioModal";
+import { CorrectionPanel } from "@/components/CorrectionPanel";
 import { generateMarketData, MOCK_WATCHES } from "@/data/mockData";
 import { toast } from "sonner";
 import type { Liquidity } from "@/types/watch";
@@ -56,6 +58,42 @@ const SpecItem = ({ label, value }: { label: string; value?: string | null }) =>
   </div>
 );
 
+const EditableSpecItem = ({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value?: string | null;
+  onChange: (val: string) => void;
+}) => (
+  <div className="py-3 border-b border-border last:border-b-0">
+    <p className="text-muted-foreground text-xs font-body uppercase tracking-wider mb-1">{label}</p>
+    <Input
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="N/D"
+      className="font-body text-sm bg-secondary/30 border-secondary"
+    />
+  </div>
+);
+
+type RefSourceStatus = 'official' | 'unknown';
+
+const ReferenceBadge = ({ status, brandSite }: { status: RefSourceStatus; brandSite?: string | null }) => {
+  if (status === 'official') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 ml-2 text-xs px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap"
+        title={`Dati estratti da ${brandSite ?? 'sito ufficiale'}`}
+      >
+        ✓ Sito ufficiale
+      </span>
+    );
+  }
+  return null;
+};
+
 // Derive mock extra fields deterministically from brand+reference
 function deriveMockFields(brand: string, ref: string) {
   const seed = Math.abs(ref.split('').reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 0));
@@ -92,6 +130,12 @@ const Result = () => {
   const [portfolioOpen, setPortfolioOpen] = useState(false);
   const [portfolioPrice, setPortfolioPrice] = useState<number | undefined>();
 
+  // Editable fields state
+  const [editMode, setEditMode] = useState(false);
+  const [editedWatch, setEditedWatch] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [displayWatch, setDisplayWatch] = useState<any>(null);
+
   if (!result) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -103,7 +147,17 @@ const Result = () => {
     );
   }
 
-  const { watch, description, market, confidence_summary: confSummary } = result;
+  const { watch: originalWatch, description, market, confidence_summary: confSummary, official_source: officialSource, watch_id: watchId } = result;
+  // Use displayWatch (updated after save) or fall back to original
+  const watch = displayWatch || originalWatch;
+
+  // Initialize editedWatch and displayWatch on first render
+  useEffect(() => {
+    if (!editedWatch && originalWatch) {
+      setEditedWatch({ ...originalWatch });
+      setDisplayWatch({ ...originalWatch });
+    }
+  }, [originalWatch, editedWatch]);
   const lowConfidence = watch.confidence < 0.5;
   const brandSlug = watch.brand?.toLowerCase().replace(/\s+/g, "-");
   const chrono24Search = `http://chrono24.com/search/index.htm?dosearch=true&query=${encodeURIComponent(watch.brand + " " + watch.model)}`;
@@ -127,6 +181,46 @@ const Result = () => {
       toast.success("Link copiato negli appunti!");
     } catch {
       toast.error("Impossibile copiare il link.");
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    if (!watchId || !editedWatch) return;
+
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/correct", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          watch_id: watchId,
+          brand: editedWatch.brand?.trim() || null,
+          model: editedWatch.model?.trim() || null,
+          reference: editedWatch.reference?.trim() || null,
+          case_material: editedWatch.case_material?.trim() || null,
+          case_size: editedWatch.case_size?.trim() || null,
+          movement: editedWatch.movement?.trim() || null,
+          crystal: editedWatch.crystal?.trim() || null,
+          water_resistance: editedWatch.water_resistance?.trim() || null,
+          bracelet: editedWatch.bracelet?.trim() || null,
+          dial_color: editedWatch.dial_color?.trim() || null,
+          complications: editedWatch.complications,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Errore sconosciuto" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      // Update the display watch with the corrected data
+      setDisplayWatch({ ...editedWatch });
+      setEditMode(false);
+      toast.success("Dati salvati correttamente!");
+    } catch (e) {
+      toast.error(String(e instanceof Error ? e.message : e));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -184,6 +278,19 @@ const Result = () => {
             </div>
           </motion.div>
 
+          {/* Correction Panel */}
+          {watchId && (
+            <CorrectionPanel
+              watchId={watchId}
+              initialBrand={watch.brand ?? ""}
+              initialModel={watch.model ?? ""}
+              initialReference={watch.reference ?? ""}
+              onDataSaved={(updatedData) => {
+                setDisplayWatch({ ...displayWatch, ...updatedData });
+              }}
+            />
+          )}
+
           {/* Tabs */}
           <Tabs defaultValue="scheda" className="mb-8">
             <TabsList className="bg-secondary/50 border border-border mb-6 w-full sm:w-auto">
@@ -197,45 +304,161 @@ const Result = () => {
 
             {/* TAB 1: Scheda Tecnica */}
             <TabsContent value="scheda">
+              <div className="mb-4 flex justify-end gap-2">
+                {!editMode ? (
+                  <Button variant="gold-outline" size="sm" onClick={() => setEditMode(true)}>
+                    Modifica dati
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="gold"
+                      size="sm"
+                      onClick={handleSaveChanges}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? "Salvando..." : "Salva modifiche"}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setEditMode(false)}>
+                      Annulla
+                    </Button>
+                  </>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card p-6 rounded-lg">
                   <h2 className="font-display text-xl font-semibold mb-4 text-primary">Identificazione</h2>
                   <div className="grid grid-cols-2 gap-x-6">
-                    <SpecItem label="Brand" value={watch.brand} />
-                    <SpecItem label="Modello" value={watch.model} />
-                    <SpecItem label="Referenza" value={watch.reference} />
-                    <SpecItem label="Anno introduzione" value={String(mockFields.year_introduced)} />
+                    {editMode && editedWatch ? (
+                      <>
+                        <EditableSpecItem
+                          label="Brand"
+                          value={editedWatch.brand}
+                          onChange={(val) => setEditedWatch({ ...editedWatch, brand: val })}
+                        />
+                        <EditableSpecItem
+                          label="Modello"
+                          value={editedWatch.model}
+                          onChange={(val) => setEditedWatch({ ...editedWatch, model: val })}
+                        />
+                        <EditableSpecItem
+                          label="Referenza"
+                          value={editedWatch.reference}
+                          onChange={(val) => setEditedWatch({ ...editedWatch, reference: val })}
+                        />
+                        <SpecItem label="Anno introduzione" value={String(mockFields.year_introduced)} />
+                      </>
+                    ) : (
+                      <>
+                        <SpecItem label="Brand" value={watch.brand} />
+                        <SpecItem label="Modello" value={watch.model} />
+                        <div className="py-3 border-b border-border last:border-b-0">
+                          <p className="text-muted-foreground text-xs font-body uppercase tracking-wider mb-1">Referenza</p>
+                          <p className="text-foreground font-body flex items-center flex-wrap gap-y-1">
+                            {watch.reference || "N/D"}
+                            {officialSource?.found && (
+                              <ReferenceBadge status="official" brandSite={officialSource.brand_site} />
+                            )}
+                          </p>
+                        </div>
+                        <SpecItem label="Anno introduzione" value={String(mockFields.year_introduced)} />
+                      </>
+                    )}
                   </div>
                 </motion.div>
 
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="glass-card p-6 rounded-lg">
                   <h2 className="font-display text-xl font-semibold mb-4 text-primary">Movimento</h2>
                   <div className="grid grid-cols-2 gap-x-6">
-                    <SpecItem label="Tipo" value={watch.movement} />
-                    <SpecItem label="Calibro" value={mockFields.caliber} />
-                    <SpecItem label="Riserva di carica" value={mockFields.power_reserve} />
-                    <SpecItem label="Frequenza" value={mockFields.frequency} />
+                    {editMode && editedWatch ? (
+                      <>
+                        <EditableSpecItem
+                          label="Tipo"
+                          value={editedWatch.movement}
+                          onChange={(val) => setEditedWatch({ ...editedWatch, movement: val })}
+                        />
+                        <SpecItem label="Calibro" value={mockFields.caliber} />
+                        <SpecItem label="Riserva di carica" value={mockFields.power_reserve} />
+                        <SpecItem label="Frequenza" value={mockFields.frequency} />
+                      </>
+                    ) : (
+                      <>
+                        <SpecItem label="Tipo" value={watch.movement} />
+                        <SpecItem label="Calibro" value={mockFields.caliber} />
+                        <SpecItem label="Riserva di carica" value={mockFields.power_reserve} />
+                        <SpecItem label="Frequenza" value={mockFields.frequency} />
+                      </>
+                    )}
                   </div>
                 </motion.div>
 
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card p-6 rounded-lg">
                   <h2 className="font-display text-xl font-semibold mb-4 text-primary">Cassa</h2>
                   <div className="grid grid-cols-2 gap-x-6">
-                    <SpecItem label="Materiale" value={watch.case_material} />
-                    <SpecItem label="Diametro" value={watch.case_size} />
-                    <SpecItem label="Spessore" value={mockFields.thickness} />
-                    <SpecItem label="Peso" value={mockFields.weight} />
-                    <SpecItem label="Fondello" value={mockFields.case_back} />
-                    <SpecItem label="Vetro" value={watch.crystal} />
-                    <SpecItem label="Impermeabilità" value={watch.water_resistance} />
-                    <SpecItem label="Bracciale" value={watch.bracelet} />
+                    {editMode && editedWatch ? (
+                      <>
+                        <EditableSpecItem
+                          label="Materiale"
+                          value={editedWatch.case_material}
+                          onChange={(val) => setEditedWatch({ ...editedWatch, case_material: val })}
+                        />
+                        <EditableSpecItem
+                          label="Diametro"
+                          value={editedWatch.case_size}
+                          onChange={(val) => setEditedWatch({ ...editedWatch, case_size: val })}
+                        />
+                        <SpecItem label="Spessore" value={mockFields.thickness} />
+                        <SpecItem label="Peso" value={mockFields.weight} />
+                        <SpecItem label="Fondello" value={mockFields.case_back} />
+                        <EditableSpecItem
+                          label="Vetro"
+                          value={editedWatch.crystal}
+                          onChange={(val) => setEditedWatch({ ...editedWatch, crystal: val })}
+                        />
+                        <EditableSpecItem
+                          label="Impermeabilità"
+                          value={editedWatch.water_resistance}
+                          onChange={(val) => setEditedWatch({ ...editedWatch, water_resistance: val })}
+                        />
+                        <EditableSpecItem
+                          label="Bracciale"
+                          value={editedWatch.bracelet}
+                          onChange={(val) => setEditedWatch({ ...editedWatch, bracelet: val })}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <SpecItem label="Materiale" value={watch.case_material} />
+                        <SpecItem label="Diametro" value={watch.case_size} />
+                        <SpecItem label="Spessore" value={mockFields.thickness} />
+                        <SpecItem label="Peso" value={mockFields.weight} />
+                        <SpecItem label="Fondello" value={mockFields.case_back} />
+                        <SpecItem label="Vetro" value={watch.crystal} />
+                        <SpecItem label="Impermeabilità" value={watch.water_resistance} />
+                        <SpecItem label="Bracciale" value={watch.bracelet} />
+                      </>
+                    )}
                   </div>
                 </motion.div>
 
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="glass-card p-6 rounded-lg">
                   <h2 className="font-display text-xl font-semibold mb-4 text-primary">Quadrante & Stima Prezzo</h2>
-                  <SpecItem label="Colore quadrante" value={watch.dial_color} />
-                  <SpecItem label="Complicazioni" value={watch.complications?.join(", ") || "Nessuna"} />
+                  {editMode && editedWatch ? (
+                    <>
+                      <EditableSpecItem
+                        label="Colore quadrante"
+                        value={editedWatch.dial_color}
+                        onChange={(val) => setEditedWatch({ ...editedWatch, dial_color: val })}
+                      />
+                      <SpecItem label="Complicazioni" value={editedWatch.complications?.join(", ") || "Nessuna"} />
+                    </>
+                  ) : (
+                    <>
+                      <SpecItem label="Colore quadrante" value={watch.dial_color} />
+                      <SpecItem label="Complicazioni" value={watch.complications?.join(", ") || "Nessuna"} />
+                    </>
+                  )}
                   <div className="mt-4 pt-4 border-t border-border">
                     <p className="text-muted-foreground text-xs font-body uppercase tracking-wider mb-1">Stima prezzo mercato</p>
                     {watch.estimated_price_eur_min && watch.estimated_price_eur_max ? (
@@ -264,9 +487,15 @@ const Result = () => {
                     <a href={chrono24Lis} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors font-body text-sm p-3 rounded-lg bg-secondary/50 hover:bg-secondary">
                       <ExternalLink className="h-4 w-4" />LuxuryInStock su Chrono24
                     </a>
-                    {officialUrl && (
-                      <a href={officialUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors font-body text-sm p-3 rounded-lg bg-secondary/50 hover:bg-secondary">
-                        <ExternalLink className="h-4 w-4" />Sito ufficiale {watch.brand}
+                    {(officialSource?.url || officialUrl) && (
+                      <a
+                        href={officialSource?.url ?? officialUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-foreground hover:text-primary transition-colors font-body text-sm p-3 rounded-lg bg-secondary/50 hover:bg-secondary"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        {officialSource?.found ? `Scheda ufficiale ${watch.brand}` : `Sito ufficiale ${watch.brand}`}
                       </a>
                     )}
                     <a href={lisCollection} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors font-body text-sm p-3 rounded-lg bg-secondary/50 hover:bg-secondary">

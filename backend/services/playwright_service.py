@@ -5,6 +5,7 @@ from typing import Dict
 
 import config
 from services.scrapers.chrono24 import Chrono24Scraper
+from services.brand_agent_service import search_on_brand_site
 
 
 def scrape_market_data(brand: str, model: str, reference: str, debug: bool = False) -> Dict:
@@ -55,6 +56,56 @@ def scrape_market_data(brand: str, model: str, reference: str, debug: bool = Fal
         "listings": listings[:20],
         "priceHistory": [],
     }
+
+
+def run_brand_agent(
+    brand: str,
+    model: str,
+    image_b64: str | None,
+    ai_key: str,
+    use_openrouter: bool,
+) -> Dict:
+    """Apre un browser Playwright dedicato, naviga il sito ufficiale del brand
+    e restituisce {found, reference, specs, source_url, brand_site, match_confidence}.
+    Gestisce eccezioni internamente — non propaga mai errori alla pipeline.
+    """
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=config.SCRAPER_HEADLESS)
+            context = browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/125.0.0.0 Safari/537.36"
+                ),
+                locale="en-US",
+                timezone_id="Europe/Rome",
+                viewport={"width": 1280, "height": 900},
+            )
+            page = context.new_page()
+            try:
+                result = search_on_brand_site(
+                    brand=brand,
+                    model=model,
+                    image_b64=image_b64,
+                    page=page,
+                    ai_key=ai_key,
+                    use_openrouter=use_openrouter,
+                    timeout_ms=config.SCRAPER_TIMEOUT_MS,
+                )
+            finally:
+                browser.close()
+        return result
+    except Exception as exc:
+        return {
+            "found": False,
+            "reference": None,
+            "specs": {},
+            "source_url": None,
+            "brand_site": brand.lower(),
+            "match_confidence": 0.0,
+            "error": str(exc),
+        }
 
 
 def _empty(brand: str, model: str, reference: str) -> Dict:

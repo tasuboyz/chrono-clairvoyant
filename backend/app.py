@@ -1,8 +1,14 @@
 import os
+import logging
 from flask import Flask, send_from_directory, send_file
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
 import config
-from routes import identify_bp, market_bp, analyze_bp
+from routes import identify_bp, market_bp, analyze_bp, correct_bp
 from services.db_service import init_db
 
 app = Flask(__name__, static_folder=config.DIST_DIR, static_url_path="")
@@ -11,6 +17,7 @@ app = Flask(__name__, static_folder=config.DIST_DIR, static_url_path="")
 app.register_blueprint(identify_bp, url_prefix="/api")
 app.register_blueprint(market_bp, url_prefix="/api")
 app.register_blueprint(analyze_bp, url_prefix="/api")
+app.register_blueprint(correct_bp, url_prefix="/api")
 
 # Inizializza SQLite — crea backend/data/watches.db se non esiste
 init_db()

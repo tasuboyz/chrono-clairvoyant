@@ -161,6 +161,151 @@ def identify_watch(input_type: str, image_b64: str | None, text: str | None, ai_
     return json.loads(tool_call["function"]["arguments"])
 
 
+MATCH_WATCH_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "match_watch_on_page",
+        "description": "Identify which product on the page matches the original watch",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "match_index": {
+                    "type": ["integer", "null"],
+                    "description": "1-based index of matching product (left-to-right, top-to-bottom), or null if none matches",
+                },
+                "confidence": {"type": "number", "description": "Confidence 0.0-1.0"},
+                "reason": {"type": "string", "description": "Brief explanation"},
+            },
+            "required": ["match_index", "confidence", "reason"],
+        },
+    },
+}
+
+SPECS_EXTRACTION_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "extract_watch_specs",
+        "description": "Extract technical specifications from an official brand watch product page",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reference": {"type": "string"},
+                "case_material": {"type": "string"},
+                "case_size_mm": {"type": "string"},
+                "movement_type": {"type": "string"},
+                "caliber": {"type": "string"},
+                "power_reserve_h": {"type": "string"},
+                "water_resistance_m": {"type": "string"},
+                "crystal": {"type": "string"},
+                "bracelet_material": {"type": "string"},
+                "dial_color": {"type": "string"},
+                "complications": {"type": "array", "items": {"type": "string"}},
+                "official_price_eur": {"type": "string"},
+            },
+            "required": ["reference"],
+        },
+    },
+}
+
+
+def match_watch_on_page(
+    page_screenshot_b64: str,
+    original_image_b64: str | None,
+    ai_key: str,
+    use_openrouter: bool,
+) -> dict:
+    """Invia screenshot della pagina + immagine originale a Gemini.
+    Restituisce {match_index, confidence, reason} — match_index è 1-based o None.
+    """
+    if not original_image_b64:
+        return {"match_index": None, "confidence": 0.0, "reason": "No original image"}
+
+    if not page_screenshot_b64.startswith("data:"):
+        page_screenshot_b64 = f"data:image/png;base64,{page_screenshot_b64}"
+    if not original_image_b64.startswith("data:"):
+        original_image_b64 = f"data:image/jpeg;base64,{original_image_b64}"
+
+    system_prompt = (
+        "Sei un esperto di orologeria. Ti vengono mostrate due immagini:\n"
+        "1. IMMAGINE ORIGINALE: la foto dell'orologio da identificare\n"
+        "2. SCREENSHOT PAGINA: una pagina web con prodotti orologi\n\n"
+        "Identifica quale prodotto nello screenshot corrisponde all'orologio nell'immagine originale. "
+        "Conta i prodotti da sinistra a destra, dall'alto in basso (1-based). "
+        "Se nessuno corrisponde, restituisci null. Sii preciso: confronta lunetta, quadrante, cassa, bracciale."
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "IMMAGINE ORIGINALE (orologio da identificare):"},
+                {"type": "image_url", "image_url": {"url": original_image_b64}},
+                {"type": "text", "text": "SCREENSHOT PAGINA (prodotti sul sito ufficiale):"},
+                {"type": "image_url", "image_url": {"url": page_screenshot_b64}},
+                {"type": "text", "text": "Quale prodotto nella pagina corrisponde all'orologio originale?"},
+            ],
+        },
+    ]
+
+    data = _chat(
+        messages=messages,
+        tools=[MATCH_WATCH_SCHEMA],
+        tool_choice={"type": "function", "function": {"name": "match_watch_on_page"}},
+        ai_key=ai_key,
+        use_openrouter=use_openrouter,
+        timeout=30,
+    )
+    tool_call = data["choices"][0]["message"]["tool_calls"][0]
+    return json.loads(tool_call["function"]["arguments"])
+
+
+def extract_watch_specs(
+    page_screenshot_b64: str,
+    page_text: str,
+    ai_key: str,
+    use_openrouter: bool,
+) -> dict:
+    """Estrae specifiche tecniche da screenshot + testo di una pagina prodotto ufficiale.
+    Restituisce dict con reference, case_material, case_size_mm, movement_type, caliber, ecc.
+    """
+    if not page_screenshot_b64.startswith("data:"):
+        page_screenshot_b64 = f"data:image/png;base64,{page_screenshot_b64}"
+
+    # Tronca il testo pagina per non saturare il contesto
+    truncated_text = page_text[:4000] if page_text else ""
+
+    system_prompt = (
+        "Sei su una pagina prodotto del sito ufficiale di un brand di orologi. "
+        "Estrai le specifiche tecniche dalla pagina. "
+        "Restituisci SOLO i dati effettivamente presenti — non inventare nulla. "
+        "Se un campo non è presente, omettilo o usa stringa vuota."
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": f"TESTO PAGINA:\n{truncated_text}\n\nSCREENSHOT PAGINA:"},
+                {"type": "image_url", "image_url": {"url": page_screenshot_b64}},
+                {"type": "text", "text": "Estrai le specifiche tecniche dell'orologio."},
+            ],
+        },
+    ]
+
+    data = _chat(
+        messages=messages,
+        tools=[SPECS_EXTRACTION_SCHEMA],
+        tool_choice={"type": "function", "function": {"name": "extract_watch_specs"}},
+        ai_key=ai_key,
+        use_openrouter=use_openrouter,
+        timeout=30,
+    )
+    tool_call = data["choices"][0]["message"]["tool_calls"][0]
+    return json.loads(tool_call["function"]["arguments"])
+
+
 def generate_description(brand: str, model: str, reference: str, ai_key: str, use_openrouter: bool) -> str:
     prompt = (
         f"Sei un giornalista esperto di orologeria di lusso che scrive per una rivista italiana di alto livello.\n\n"
